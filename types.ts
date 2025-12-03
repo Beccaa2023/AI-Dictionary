@@ -36,6 +36,15 @@ export interface SavedItem extends DictionaryResult {
   id: string;
 }
 
+export interface SavedSentence {
+  id: string;
+  original: string;
+  translated: string;
+  targetLang: string;
+  sourceLang: string;
+  timestamp: number;
+}
+
 export interface ChatMessage {
   role: 'user' | 'model';
   text: string;

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { LANGUAGES, AI_MODELS, DEFAULT_SETTINGS } from './constants';
-import { Language, AppMode, DictionaryResult, SavedItem, AppSettings } from './types';
+import { Language, AppMode, DictionaryResult, SavedItem, AppSettings, SavedSentence, ExampleSentence } from './types';
 import WelcomeScreen from './components/WelcomeScreen';
 import ResultCard from './components/ResultCard';
 import NotebookView from './components/NotebookView';
@@ -10,8 +10,14 @@ import { Search, Book, Layers, ArrowLeft, Loader2, Settings, X, Save } from 'luc
 
 const App: React.FC = () => {
   const [hasStarted, setHasStarted] = useState(false);
-  const [nativeLang, setNativeLang] = useState<Language>(LANGUAGES[0]); // Default En
-  const [targetLang, setTargetLang] = useState<Language>(LANGUAGES[2]); // Default Es
+  
+  // Default Native: Chinese (zh), Target: English (en)
+  const [nativeLang, setNativeLang] = useState<Language>(
+    () => LANGUAGES.find(l => l.code === 'zh') || LANGUAGES[2]
+  ); 
+  const [targetLang, setTargetLang] = useState<Language>(
+    () => LANGUAGES.find(l => l.code === 'en') || LANGUAGES[0]
+  );
   
   const [mode, setMode] = useState<AppMode>(AppMode.SEARCH);
   const [query, setQuery] = useState("");
@@ -25,14 +31,25 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
   });
 
+  // Saved Words
   const [savedItems, setSavedItems] = useState<SavedItem[]>(() => {
     const saved = localStorage.getItem('lingopop_saved');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  // Saved Sentences
+  const [savedSentences, setSavedSentences] = useState<SavedSentence[]>(() => {
+    const saved = localStorage.getItem('lingopop_saved_sentences');
     return saved ? JSON.parse(saved) : [];
   });
 
   useEffect(() => {
     localStorage.setItem('lingopop_saved', JSON.stringify(savedItems));
   }, [savedItems]);
+
+  useEffect(() => {
+    localStorage.setItem('lingopop_saved_sentences', JSON.stringify(savedSentences));
+  }, [savedSentences]);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,13 +91,32 @@ const App: React.FC = () => {
   };
 
   const saveItem = (item: DictionaryResult) => {
-    if (savedItems.some(i => i.word === item.word)) return;
+    if (savedItems.some(i => i.word === item.word && i.targetLang === item.targetLang)) return;
     const newItem: SavedItem = { ...item, id: crypto.randomUUID() };
     setSavedItems(prev => [newItem, ...prev]);
   };
 
   const deleteItem = (id: string) => {
     setSavedItems(prev => prev.filter(i => i.id !== id));
+  };
+
+  const saveSentence = (example: ExampleSentence, sourceLang: string, targetLang: string) => {
+    // Avoid duplicates
+    if (savedSentences.some(s => s.original === example.original && s.targetLang === targetLang)) return;
+
+    const newSentence: SavedSentence = {
+      id: crypto.randomUUID(),
+      original: example.original,
+      translated: example.translated,
+      sourceLang,
+      targetLang,
+      timestamp: Date.now()
+    };
+    setSavedSentences(prev => [newSentence, ...prev]);
+  };
+
+  const deleteSentence = (id: string) => {
+    setSavedSentences(prev => prev.filter(s => s.id !== id));
   };
 
   const reviewItem = (item: SavedItem) => {
@@ -91,8 +127,6 @@ const App: React.FC = () => {
   const saveSettings = () => {
     localStorage.setItem('lingopop_settings', JSON.stringify(settings));
     setShowSettings(false);
-    // Reload page to ensure service picks up new env? 
-    // Actually our service reads from localStorage on every call, so no reload needed.
     alert("Settings saved!");
   };
 
@@ -124,7 +158,7 @@ const App: React.FC = () => {
           <div className="flex items-center gap-1 sm:gap-2 bg-slate-100 rounded-full px-2 py-1 border border-slate-200 shadow-inner">
             <select
               value={nativeLang.code}
-              onChange={(e) => setNativeLang(LANGUAGES.find(l => l.code === e.target.value) || LANGUAGES[0])}
+              onChange={(e) => setNativeLang(LANGUAGES.find(l => l.code === e.target.value) || LANGUAGES[2])}
               className="bg-transparent text-xs sm:text-sm font-bold text-slate-700 focus:outline-none cursor-pointer py-1 pl-1 appearance-none hover:text-indigo-600 transition-colors text-center"
               title="Native Language"
             >
@@ -137,7 +171,7 @@ const App: React.FC = () => {
             
             <select
               value={targetLang.code}
-              onChange={(e) => setTargetLang(LANGUAGES.find(l => l.code === e.target.value) || LANGUAGES[1])}
+              onChange={(e) => setTargetLang(LANGUAGES.find(l => l.code === e.target.value) || LANGUAGES[0])}
               className="bg-transparent text-xs sm:text-sm font-bold text-slate-700 focus:outline-none cursor-pointer py-1 pr-1 appearance-none hover:text-indigo-600 transition-colors text-center"
               title="Target Language"
             >
@@ -210,8 +244,10 @@ const App: React.FC = () => {
               <div className="animate-slide-up">
                  <ResultCard 
                    result={currentResult} 
-                   isSaved={savedItems.some(i => i.word === currentResult.word)}
+                   isSaved={savedItems.some(i => i.word === currentResult.word && i.targetLang === currentResult.targetLang)}
                    onSave={saveItem}
+                   onSaveSentence={(ex) => saveSentence(ex, currentResult.sourceLang, currentResult.targetLang)}
+                   isSentenceSaved={(ex) => savedSentences.some(s => s.original === ex.original && s.targetLang === currentResult.targetLang)}
                    nativeLangName={currentResult.sourceLang || nativeLang.name}
                    targetLangName={currentResult.targetLang || targetLang.name}
                  />
@@ -225,8 +261,10 @@ const App: React.FC = () => {
           <div className="animate-fade-in">
             <NotebookView 
               items={savedItems} 
+              savedSentences={savedSentences}
               nativeLangName={nativeLang.name}
               onDelete={deleteItem}
+              onDeleteSentence={deleteSentence}
               onReview={reviewItem}
             />
           </div>

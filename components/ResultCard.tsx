@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { DictionaryResult, ChatMessage, SavedItem } from '../types';
-import { Play, Share2, Bookmark, BookmarkCheck, MessageCircle, Send, X, GraduationCap } from 'lucide-react';
+import { DictionaryResult, ChatMessage, SavedItem, ExampleSentence } from '../types';
+import { Play, Share2, Bookmark, BookmarkCheck, MessageCircle, Send, X, GraduationCap, Heart } from 'lucide-react';
 import { generateSpeech, getChatResponse } from '../services/geminiService';
 import { playAudioData } from '../services/audioService';
 
@@ -8,11 +8,21 @@ interface Props {
   result: DictionaryResult;
   onSave: (item: DictionaryResult) => void;
   isSaved: boolean;
+  onSaveSentence: (example: ExampleSentence) => void;
+  isSentenceSaved: (example: ExampleSentence) => boolean;
   nativeLangName: string;
   targetLangName: string;
 }
 
-const ResultCard: React.FC<Props> = ({ result, onSave, isSaved, nativeLangName, targetLangName }) => {
+const ResultCard: React.FC<Props> = ({ 
+  result, 
+  onSave, 
+  isSaved, 
+  onSaveSentence, 
+  isSentenceSaved, 
+  nativeLangName, 
+  targetLangName 
+}) => {
   const [chatOpen, setChatOpen] = useState(false);
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
@@ -77,6 +87,7 @@ const ResultCard: React.FC<Props> = ({ result, onSave, isSaved, nativeLangName, 
             <button 
               onClick={() => onSave(result)}
               className={`p-3 rounded-full shadow-lg transition-all ${isSaved ? 'bg-green-500 text-white' : 'bg-white text-slate-700 hover:scale-110'}`}
+              title="Save to Notebook"
             >
               {isSaved ? <BookmarkCheck size={24} /> : <Bookmark size={24} />}
             </button>
@@ -136,23 +147,35 @@ const ResultCard: React.FC<Props> = ({ result, onSave, isSaved, nativeLangName, 
           {/* Examples */}
           <div className="space-y-4 mb-8">
             <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Examples</h3>
-            {result.examples.map((ex, idx) => (
-              <div key={idx} className="group bg-slate-50 p-4 rounded-xl border border-slate-100 hover:border-indigo-100 transition relative">
-                <div className="flex justify-between items-start gap-3">
-                  <div className="flex-1">
-                    <p className="text-lg text-slate-800 font-medium mb-1">{ex.original}</p>
-                    <p className="text-slate-500 text-sm">{ex.translated}</p>
+            {result.examples.map((ex, idx) => {
+              const saved = isSentenceSaved(ex);
+              return (
+                <div key={idx} className="group bg-slate-50 p-4 rounded-xl border border-slate-100 hover:border-indigo-100 transition relative">
+                  <div className="flex justify-between items-start gap-3">
+                    <div className="flex-1">
+                      <p className="text-lg text-slate-800 font-medium mb-1">{ex.original}</p>
+                      <p className="text-slate-500 text-sm">{ex.translated}</p>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <button 
+                        onClick={() => handlePlayAudio(ex.original, `ex-${idx}`)}
+                        disabled={!!isPlaying}
+                        className={`p-2 rounded-full shadow-sm text-indigo-500 transition-all ${isPlaying === `ex-${idx}` ? 'bg-indigo-100 animate-pulse' : 'bg-white opacity-60 group-hover:opacity-100'}`}
+                      >
+                        <Play size={16} fill="currentColor" />
+                      </button>
+                      <button 
+                        onClick={() => onSaveSentence(ex)}
+                        className={`p-2 rounded-full shadow-sm transition-all ${saved ? 'bg-pink-100 text-pink-500' : 'bg-white text-slate-300 opacity-60 group-hover:opacity-100 hover:text-pink-400'}`}
+                        title="Save Sentence"
+                      >
+                        <Heart size={16} fill={saved ? "currentColor" : "none"} />
+                      </button>
+                    </div>
                   </div>
-                  <button 
-                    onClick={() => handlePlayAudio(ex.original, `ex-${idx}`)}
-                    disabled={!!isPlaying}
-                    className={`p-2 rounded-full shadow-sm text-indigo-500 transition-all ${isPlaying === `ex-${idx}` ? 'bg-indigo-100 animate-pulse' : 'bg-white opacity-60 group-hover:opacity-100'}`}
-                  >
-                    <Play size={16} fill="currentColor" />
-                  </button>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Chat Toggle */}
